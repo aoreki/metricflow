@@ -155,6 +155,8 @@ class MetricFlowQueryRequest:
     dataflow_plan_optimizations: FrozenSet[DataflowPlanOptimization]
     query_type: MetricFlowQueryType
     order_output_columns_by_input_order: bool
+    export: bool
+    schema: Optional[str]
 
     @staticmethod
     def create_with_random_request_id(  # noqa: D102
@@ -177,6 +179,8 @@ class MetricFlowQueryRequest:
         min_max_only: bool = False,
         apply_group_by: bool = True,
         order_output_columns_by_input_order: bool = False,
+        export: bool = False,
+        schema: Optional[str] = None,
     ) -> MetricFlowQueryRequest:
         return MetricFlowQueryRequest(
             request_id=MetricFlowRequestId(mf_rid=f"{random_id()}"),
@@ -197,6 +201,8 @@ class MetricFlowQueryRequest:
             min_max_only=min_max_only,
             apply_group_by=apply_group_by,
             order_output_columns_by_input_order=order_output_columns_by_input_order,
+            export=export,
+            schema=schema,
         )
 
 
@@ -246,6 +252,17 @@ class MetricFlowExplainResult:
     @property
     def execution_plan(self) -> ExecutionPlan:  # noqa: D102
         return self.convert_to_execution_plan_result.execution_plan
+
+
+@dataclass(frozen=True)
+class MetricFlowExportRequest:
+    schema: str
+    select: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class MetricFlowExportResult:
+    pass
 
 
 class AbstractMetricFlowEngine(ABC):
@@ -496,6 +513,24 @@ class MetricFlowEngine(AbstractMetricFlowEngine):
             result_table=explain_result.output_table,
         )
 
+    def export(self, mf_request: MetricFlowExportRequest) -> MetricFlowExportResult:
+        logger.info(LazyFormat("Starting export request", mf_request=mf_request))
+
+        if mf_request.select is not None:
+            query_names = [mf_request.select]
+        else:
+            query_names = list(map(lambda r: r.name,self.list_saved_queries()))
+
+        for query_name in query_names:
+            query_request = MetricFlowQueryRequest.create_with_random_request_id(
+                saved_query_name=query_name,
+                export=True,
+                schema=mf_request.schema,
+            )
+            logger.info("starting query: %(name)", {"name": mf_request.select})
+            query_result = self.query(query_request)
+            logger.info("end query: %(name)", {"name": mf_request.select})
+
     @property
     def all_time_constraint(self) -> TimeRangeConstraint:
         """TimeRangeConstraint representing the min & max dates supported."""
@@ -558,7 +593,7 @@ class MetricFlowEngine(AbstractMetricFlowEngine):
                 dimension_specs=query_spec.dimension_specs,
                 time_dimension_specs=query_spec.time_dimension_specs,
             )
-        if query_spec.metric_specs:
+        if mf_query_request.export:
             logger.info(
                 LazyFormat(
                     "Building dataflow plan", dataflow_plan_optimizations=mf_query_request.dataflow_plan_optimizations
@@ -566,6 +601,19 @@ class MetricFlowEngine(AbstractMetricFlowEngine):
             )
             dataflow_plan = self._dataflow_plan_builder.build_plan(
                 query_spec=query_spec,
+                output_sql_table=SqlTable(schema_name=mf_query_request.schema, table_name=mf_query_request.saved_query_name),
+                output_selection_specs=output_selection_specs,
+                optimizations=mf_query_request.dataflow_plan_optimizations,
+            )
+        elif query_spec.metric_specs:
+            logger.info(
+                LazyFormat(
+                    "Building export dataflow plan", dataflow_plan_optimizations=mf_query_request.dataflow_plan_optimizations
+                )
+            )
+            dataflow_plan = self._dataflow_plan_builder.build_plan(
+                query_spec=query_spec,
+                output_sql_table=SqlTable(schema_name=mf_query_request.schema,table_name=mf_query_request.saved_query_name),
                 output_selection_specs=output_selection_specs,
                 optimizations=mf_query_request.dataflow_plan_optimizations,
             )

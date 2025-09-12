@@ -36,7 +36,7 @@ from dbt_metricflow.cli.utils import (
     query_options,
     start_end_time_options,
 )
-from metricflow.engine.metricflow_engine import MetricFlowExplainResult, MetricFlowQueryRequest, MetricFlowQueryResult
+from metricflow.engine.metricflow_engine import MetricFlowExplainResult, MetricFlowQueryRequest, MetricFlowQueryResult, MetricFlowExportRequest, MetricFlowExportResult
 from metricflow.telemetry.models import TelemetryLevel
 from metricflow.telemetry.reporter import TelemetryReporter, log_call
 from metricflow.validation.data_warehouse_model_validator import DataWarehouseModelValidator
@@ -641,6 +641,50 @@ def saved_queries(cfg: CLIConfiguration) -> None:
     for sq in saved_queries:
         description = sq.description if sq.description else "No description provided"
         click.echo(f"• {click.style(sq.name, bold=True, fg='green')}: {description}")
+
+
+
+@cli.command()
+@click.option(
+    "--quiet",
+    required=False,
+    help="Minimize output to the console.",
+    is_flag=True,
+)
+@click.option(
+    "--schema",
+    required=True,
+    help="export table schema name.",
+)
+@click.option(
+    "--select",
+    required=False,
+    help="Select a saved-query to export.",
+)
+@pass_config
+@exception_handler
+@log_call(module_name=__name__, telemetry_reporter=_telemetry_reporter)
+def export(
+    cfg: CLIConfiguration,
+    schema: str,
+    select: Optional[str] = None,
+    quiet: bool = False,
+) -> None:
+    """Create a new query with MetricFlow and assembles a MetricFlowQueryResult."""
+    if not cfg.is_setup:
+        cfg.setup()
+
+    start = time.perf_counter()
+    logger.info(f"Starting query: {schema}")
+    spinner: Optional[Halo] = None
+
+    if not quiet:
+        spinner = Halo(text="Initiating query…", spinner="dots")
+        spinner.start()
+
+    mf_request = MetricFlowExportRequest(schema=schema, select=select)
+
+    cfg.mf.export(mf_request)
 
 
 if __name__ == "__main__":
