@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import datetime
 import logging
+import sys
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
@@ -260,11 +262,6 @@ class MetricFlowExportRequest:
     select: Optional[str] = None
 
 
-@dataclass(frozen=True)
-class MetricFlowExportResult:
-    pass
-
-
 class AbstractMetricFlowEngine(ABC):
     """Query interface for clients."""
 
@@ -513,23 +510,31 @@ class MetricFlowEngine(AbstractMetricFlowEngine):
             result_table=explain_result.output_table,
         )
 
-    def export(self, mf_request: MetricFlowExportRequest) -> MetricFlowExportResult:
-        logger.info(LazyFormat("Starting export request", mf_request=mf_request))
+    def export(self, mf_request: MetricFlowExportRequest) -> List[MetricFlowQueryResult]:
+        logger = logging.getLogger(__name__ + ".export")
+        logger.setLevel(logging.INFO)
+        handler = logging.StreamHandler(stream=sys.stdout)
+        logger.addHandler(handler)
+        logger.info(LazyFormat("Starting export saved-queries. ", mf_request=mf_request))
 
         if mf_request.select is not None:
             query_names = [mf_request.select]
         else:
             query_names = list(map(lambda r: r.name,self.list_saved_queries()))
 
+        query_results = []
         for query_name in query_names:
             query_request = MetricFlowQueryRequest.create_with_random_request_id(
                 saved_query_name=query_name,
                 export=True,
                 schema=mf_request.schema,
             )
-            logger.info("starting query: %(name)", {"name": mf_request.select})
+            start = time.perf_counter()
+            logger.info("starting export: %(name)s", {"name": query_name})
             query_result = self.query(query_request)
-            logger.info("end query: %(name)", {"name": mf_request.select})
+            query_results.append(query_result)
+            logger.info("end export: %(name)s after %(elapsed)d seconds", {"name": query_name,"elapsed": time.perf_counter() - start})
+        return query_results
 
     @property
     def all_time_constraint(self) -> TimeRangeConstraint:

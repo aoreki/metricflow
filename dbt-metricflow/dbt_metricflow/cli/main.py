@@ -36,7 +36,7 @@ from dbt_metricflow.cli.utils import (
     query_options,
     start_end_time_options,
 )
-from metricflow.engine.metricflow_engine import MetricFlowExplainResult, MetricFlowQueryRequest, MetricFlowQueryResult, MetricFlowExportRequest, MetricFlowExportResult
+from metricflow.engine.metricflow_engine import MetricFlowExplainResult, MetricFlowQueryRequest, MetricFlowQueryResult, MetricFlowExportRequest
 from metricflow.telemetry.models import TelemetryLevel
 from metricflow.telemetry.reporter import TelemetryReporter, log_call
 from metricflow.validation.data_warehouse_model_validator import DataWarehouseModelValidator
@@ -670,17 +670,9 @@ def export(
     select: Optional[str] = None,
     quiet: bool = False,
 ) -> None:
-    """Create a new query with MetricFlow and assembles a MetricFlowQueryResult."""
+    """Export saved-queries.Default export all saved-queries.Use --select to select a specific one."""
     if not cfg.is_setup:
         cfg.setup()
-
-    start = time.perf_counter()
-    logger.info(f"Starting query: {schema}")
-    spinner: Optional[Halo] = None
-
-    if not quiet:
-        spinner = Halo(text="Initiating query…", spinner="dots")
-        spinner.start()
 
     mf_request = MetricFlowExportRequest(schema=schema, select=select)
 
