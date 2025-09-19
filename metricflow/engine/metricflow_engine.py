@@ -618,7 +618,6 @@ class MetricFlowEngine(AbstractMetricFlowEngine):
             )
             dataflow_plan = self._dataflow_plan_builder.build_plan(
                 query_spec=query_spec,
-                output_sql_table=SqlTable(schema_name=mf_query_request.schema,table_name=mf_query_request.saved_query_name),
                 output_selection_specs=output_selection_specs,
                 optimizations=mf_query_request.dataflow_plan_optimizations,
             )
